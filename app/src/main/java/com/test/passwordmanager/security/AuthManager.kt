@@ -17,7 +17,7 @@ class AuthManager(private val context: Context) {
 
     fun authenticate(
         onSuccess: () -> Unit,
-        onFailed: () -> Unit
+        onError: () -> Unit
     ) {
         val executor = ContextCompat.getMainExecutor(context)
 
@@ -32,8 +32,12 @@ class AuthManager(private val context: Context) {
                     onSuccess()
                 }
 
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    onError()
+                }
+
                 override fun onAuthenticationFailed() {
-                    onFailed()
+                    onError()
                 }
             }
         )

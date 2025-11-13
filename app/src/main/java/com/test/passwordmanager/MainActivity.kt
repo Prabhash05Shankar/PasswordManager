@@ -2,6 +2,7 @@ package com.test.passwordmanager
 
 import android.os.Bundle
 import android.util.Log
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -13,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -44,6 +46,10 @@ import kotlinx.coroutines.launch
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE
+        )
 
         val database = Room.databaseBuilder(
             applicationContext,
@@ -61,8 +67,7 @@ class MainActivity : FragmentActivity() {
 
             PasswordManagerApp(
                 repository = repository,
-                authManager = authManager,
-                activity = this
+                authManager = authManager
             )
         }
     }
@@ -71,20 +76,27 @@ class MainActivity : FragmentActivity() {
 @Composable
 fun PasswordManagerApp(
     repository: PasswordRepository,
-    authManager: AuthManager,
-    activity: FragmentActivity
+    authManager: AuthManager
 ) {
     var isAuthenticated by remember { mutableStateOf(false) }
+    var showAuthDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    val authenticate = {
         if (authManager.canAuthenticate()) {
             authManager.authenticate(
-                onSuccess = { isAuthenticated = true },
-                onFailed = { activity.finish() } // Close app on failure
+                onSuccess = {
+                    isAuthenticated = true
+                    showAuthDialog = false
+                },
+                onError = { showAuthDialog = true }
             )
         } else {
             isAuthenticated = true // No biometrics, allow access
         }
+    }
+
+    LaunchedEffect(Unit) {
+        authenticate()
     }
 
     MaterialTheme(
@@ -96,9 +108,53 @@ fun PasswordManagerApp(
                     repository = repository,
                     authManager = authManager
                 )
+            } else if (showAuthDialog) {
+                AuthDialog(onRetry = authenticate)
             }
         }
     }
+}
+
+@Composable
+fun AuthDialog(onRetry: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = { /* Non-dismissible */ },
+        icon = {
+            Icon(
+                Icons.Default.Lock,
+                contentDescription = "Lock Icon",
+                modifier = Modifier.size(48.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        title = {
+            Text(
+                text = "Authentication Required",
+                style = MaterialTheme.typography.headlineSmall,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        text = {
+            Text(
+                text = "This app is locked. Please authenticate to continue.",
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onRetry,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp)
+            ) {
+                Text("Authenticate")
+            }
+        },
+        shape = RoundedCornerShape(28.dp)
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -530,7 +586,7 @@ fun DetailAccountSheet(
                                         Toast.makeText(context, "Error getting password", Toast.LENGTH_SHORT).show()
                                     }
                                 },
-                                onFailed = { Toast.makeText(context, "Authentication failed", Toast.LENGTH_SHORT).show() }
+                                onError = { Toast.makeText(context, "Authentication failed", Toast.LENGTH_SHORT).show() }
                             )
                         } else {
                             passwordVisible = !passwordVisible
@@ -582,7 +638,7 @@ fun DetailAccountSheet(
                                     Toast.makeText(context, "Error getting password", Toast.LENGTH_SHORT).show()
                                 }
                             },
-                            onFailed = {
+                            onError = {
                                 Toast.makeText(context, "Authentication failed, cannot edit", Toast.LENGTH_SHORT).show()
                             }
                         )
